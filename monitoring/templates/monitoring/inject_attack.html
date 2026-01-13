@@ -1,0 +1,33 @@
+{% extends "monitoring/base.html" %}
+{% block content %}
+<div class="container mt-4">
+  <div class="card shadow p-4 mx-auto" style="max-width: 640px;">
+    <h4 class="mb-3">Inject Synthetic Attack</h4>
+    <p class="text-muted">Create synthetic anomalous grid data for testing dashboards and alerts.</p>
+
+    <form method="post">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label for="count" class="form-label">Number of records</label>
+        <input type="number" id="count" name="count" min="1" max="100" value="5" class="form-control">
+        <div class="form-text">Max 100 rows at once.</div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Severity</label>
+        <select name="severity" class="form-select">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button class="btn btn-danger" type="submit">Inject Attack</button>
+        <a href="{% url 'dashboard' %}" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+

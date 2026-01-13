@@ -1,0 +1,207 @@
+{% extends "monitoring/base.html" %}
+
+{% block content %}
+<div class="container-fluid pt-2"> 
+    
+    <div class="row mb-2">
+        <div class="col-12 d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">⚡ Smart Grid Mission Control</h5>
+            <span class="badge bg-success" id="connectionStatus">System Online</span>
+        </div>
+    </div>
+
+    <div class="row g-2"> 
+        <div class="col-9">
+            <div class="card shadow h-100">
+                <div class="card-header bg-dark text-white py-1 px-2 d-flex justify-content-between">
+                    <small class="mb-0 fw-bold">IEEE 14-Bus Topology</small>
+                    <small style="font-size: 0.75rem;">
+                        <span style="color: #4f81bd;">● Load</span> | 
+                        <span style="color: #ff9900;">● Gen</span> | 
+                        <span style="color: #ff4444;">● ATTACK</span>
+                    </small>
+                </div>
+                <div class="card-body p-0" style="background-color: #1e1e1e;">
+                    <div id="mynetwork" style="height: 400px; width: 100%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-3">
+            
+            <div class="card shadow mb-2">
+                <div class="card-body p-1" style="background: #2b2b2b;">
+                    <div class="d-flex justify-content-between px-1">
+                        <small class="text-white" style="font-size: 0.65rem;">Physical (Chi2)</small>
+                        <small class="text-info" id="physValue" style="font-size: 0.7rem;">0.00</small>
+                    </div>
+                    <div style="position: relative; height: 90px; width: 100%;">
+                        <canvas id="physicalChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow mb-2">
+                <div class="card-body p-1" style="background: #2b2b2b;">
+                    <div class="d-flex justify-content-between px-1">
+                        <small class="text-white" style="font-size: 0.65rem;">Cyber Score</small>
+                        <small class="text-warning" id="cyberValue" style="font-size: 0.7rem;">0.00</small>
+                    </div>
+                    <div style="position: relative; height: 90px; width: 100%;">
+                        <canvas id="cyberChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow">
+                <div class="card-header bg-light py-1 px-2">
+                    <small class="mb-0 fw-bold" style="font-size: 0.7rem;">Live Feed</small>
+                </div>
+                <div class="card-body p-0 table-responsive" style="max-height: 300px; overflow-y: auto;">
+                    <table class="table table-sm table-striped mb-0" id="gridTable" style="font-size: 0.65rem;">
+                        <thead class="table-dark sticky-top">
+                            <tr>
+                                <th>Time</th>
+                                <th>Phys</th>
+                                <th>Cyber</th>
+                                <th>Status</th> </tr>
+                        </thead>
+                        <tbody>
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    // --- 1. SETUP VIS.JS MAP ---
+    const nodesArray = [
+        { id: 1, label: 'B1', group: 'generator' }, { id: 2, label: 'B2', group: 'generator' },
+        { id: 3, label: 'B3', group: 'generator' }, { id: 4, label: 'B4', group: 'load' },
+        { id: 5, label: 'B5', group: 'load' },      { id: 6, label: 'B6', group: 'generator' },
+        { id: 7, label: 'B7', group: 'load' },      { id: 8, label: 'B8', group: 'generator' },
+        { id: 9, label: 'B9', group: 'load' },      { id: 10, label: 'B10', group: 'load' },
+        { id: 11, label: 'B11', group: 'load' },    { id: 12, label: 'B12', group: 'load' },
+        { id: 13, label: 'B13', group: 'load' },    { id: 14, label: 'B14', group: 'load' }
+    ];
+    
+    const edgesArray = [
+        { from: 1, to: 2 }, { from: 1, to: 5 }, { from: 2, to: 3 }, { from: 2, to: 4 }, 
+        { from: 2, to: 5 }, { from: 3, to: 4 }, { from: 4, to: 7 }, { from: 4, to: 9 }, 
+        { from: 5, to: 6 }, { from: 6, to: 11 }, { from: 6, to: 12 }, { from: 6, to: 13 },
+        { from: 7, to: 8 }, { from: 7, to: 9 }, { from: 9, to: 10 }, { from: 9, to: 14 },
+        { from: 10, to: 11 }, { from: 12, to: 13 }, { from: 13, to: 14 }
+    ];
+
+    const nodes = new vis.DataSet(nodesArray);
+    const edges = new vis.DataSet(edgesArray);
+    const container = document.getElementById('mynetwork');
+
+    const network = new vis.Network(container, { nodes, edges }, {
+        nodes: { shape: 'dot', size: 10, font: { color: '#ffffff', size: 9 }, borderWidth: 1.5 },
+        groups: {
+            generator: { color: { background: '#ff9900', border: '#fff' }, size: 18 },
+            load: { color: { background: '#4f81bd', border: '#fff' } },
+            attacked: { color: { background: '#ff0000', border: '#ffcccc' }, size: 25 }
+        },
+        edges: { color: '#555555', width: 1 },
+        physics: { stabilization: false },
+        interaction: { zoomView: false, dragView: true }
+    });
+
+    // --- 2. SETUP CHARTS ---
+    const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { display: false }, 
+            y: { ticks: { color: '#888', font: {size: 8}, maxTicksLimit: 3 }, grid: { color: '#333' } }
+        },
+        elements: { point: { radius: 0 } }
+    };
+
+    const physCtx = document.getElementById('physicalChart').getContext('2d');
+    const physChart = new Chart(physCtx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ data: [], borderColor: 'cyan', backgroundColor: 'rgba(0, 255, 255, 0.1)', borderWidth: 1.5, fill: true }] },
+        options: commonOptions
+    });
+
+    const cyberCtx = document.getElementById('cyberChart').getContext('2d');
+    const cyberChart = new Chart(cyberCtx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ data: [], borderColor: 'magenta', backgroundColor: 'rgba(255, 0, 255, 0.1)', borderWidth: 1.5, fill: true }] },
+        options: commonOptions
+    });
+
+    // --- 3. DATA UPDATE LOOP ---
+    async function updateDashboard() {
+        try {
+            const res = await fetch("{% url 'latest_data' %}");
+            const data = await res.json();
+            
+            // A. Update Table with STATUS logic
+            const tableBody = document.querySelector('#gridTable tbody');
+            tableBody.innerHTML = "";
+            
+            data.slice(0, 15).forEach(d => {
+                const tr = document.createElement('tr');
+                let statusHtml = '<span class="text-success fw-bold">Normal</span>';
+                
+                if (d.anomaly) {
+                    tr.classList.add('table-danger');
+                    statusHtml = '<span class="text-danger fw-bold">ATTACK</span>';
+                }
+                
+                tr.innerHTML = `
+                    <td>${d.timestamp.split('T')[1].split('.')[0]}</td>
+                    <td>${Number(d.voltage).toFixed(3)}</td>
+                    <td>${Number(d.current).toFixed(3)}</td>
+                    <td>${statusHtml}</td>
+                `;
+                tableBody.appendChild(tr);
+            });
+
+            // B. Update Map & Values
+            const latest = data[0];
+            if (latest) {
+                document.getElementById('physValue').innerText = Number(latest.voltage).toFixed(3);
+                document.getElementById('cyberValue').innerText = Number(latest.current).toFixed(3);
+
+                if (latest.anomaly) {
+                    nodes.update([{id:1, group:'attacked'}, {id:2, group:'attacked'}, {id:3, group:'attacked'}, {id:6, group:'attacked'}, {id:8, group:'attacked'}]);
+                    document.getElementById('connectionStatus').className = "badge bg-danger";
+                    document.getElementById('connectionStatus').innerText = "ATTACK DETECTED";
+                } else {
+                    nodes.update([{id:1, group:'generator'}, {id:2, group:'generator'}, {id:3, group:'generator'}, {id:6, group:'generator'}, {id:8, group:'generator'}]);
+                    document.getElementById('connectionStatus').className = "badge bg-success";
+                    document.getElementById('connectionStatus').innerText = "System Online";
+                }
+            }
+
+            // C. Update Charts
+            const reversedData = [...data].reverse(); 
+            const labels = reversedData.map(d => d.timestamp);
+            
+            physChart.data.labels = labels;
+            physChart.data.datasets[0].data = reversedData.map(d => d.voltage);
+            physChart.update();
+
+            cyberChart.data.labels = labels;
+            cyberChart.data.datasets[0].data = reversedData.map(d => d.current);
+            cyberChart.update();
+
+        } catch (err) { console.error(err); }
+    }
+
+    setInterval(updateDashboard, 2000);
+    updateDashboard();
+</script>
+{% endblock %}
